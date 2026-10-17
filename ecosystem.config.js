@@ -7,6 +7,9 @@
 // pre-production deployment command: pm2 deploy ecosystem.config.js pre-production
 // Start with pm2 on server for environment `pre-production`: pm2 start npm --name "superOne" -- run "pre-production"
 
+// Deploy hosts are read from the environment so server addresses stay out of the repo,
+// e.g. DEPLOY_HOST_PRODUCTION=<ip> pm2 deploy ecosystem.config.js production
+
 module.exports = {
     apps: [{
         name: 'feature-dependency-backend',
@@ -21,7 +24,7 @@ module.exports = {
     deploy: {
         'production': {
             user: 'ubuntu',
-            host: 'REDACTED',
+            host: process.env.DEPLOY_HOST_PRODUCTION,
             ref: 'origin/main',
             repo: 'git@github.com:amrendraw3/feature-dependency-backend.git',
             path: '/home/ubuntu/feature-dependency-backend',
@@ -32,7 +35,7 @@ module.exports = {
         },
         'quick-dev': {
             user: 'ubuntu',
-            host: 'REDACTED',
+            host: process.env.DEPLOY_HOST_QUICK_DEV,
             ref: 'origin/main',
             repo: 'git@github.com:amrendraw3/feature-dependency-backend.git',
             path: '/home/ubuntu/feature-dependency-backend',
@@ -43,7 +46,7 @@ module.exports = {
         },
         'quick-dev1': {
             user: 'ubuntu',
-            host: 'REDACTED',
+            host: process.env.DEPLOY_HOST_QUICK_DEV1,
             ref: 'origin/main',
             repo: 'git@github.com:amrendraw3/feature-dependency-backend.git',
             path: '/home/ubuntu/feature-dependency-backend',
@@ -54,7 +57,7 @@ module.exports = {
         },
         'quick-dev2': {
             user: 'ubuntu',
-            host: 'REDACTED',
+            host: process.env.DEPLOY_HOST_QUICK_DEV2,
             ref: 'origin/main',
             repo: 'git@github.com:amrendraw3/feature-dependency-backend.git',
             path: '/home/ubuntu/feature-dependency-backend',
@@ -65,7 +68,7 @@ module.exports = {
         },
         'quick-dev3': {
             user: 'ubuntu',
-            host: 'REDACTED',
+            host: process.env.DEPLOY_HOST_QUICK_DEV3,
             ref: 'origin/main',
             repo: 'git@github.com:amrendraw3/feature-dependency-backend.git',
             path: '/home/ubuntu/feature-dependency-backend',
@@ -76,7 +79,7 @@ module.exports = {
         },
         'quick-dev4': {
             user: 'ubuntu',
-            host: 'REDACTED',
+            host: process.env.DEPLOY_HOST_QUICK_DEV4,
             ref: 'origin/main',
             repo: 'git@github.com:amrendraw3/feature-dependency-backend.git',
             path: '/home/ubuntu/feature-dependency-backend',
