@@ -1,617 +1,808 @@
 <!DOCTYPE html>
-<meta charset="utf-8">
-
+<html lang="en">
 <head>
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.12/dist/vue.js"></script>
-    <script src="https://d3js.org/d3.v5.min.js"></script>
-    <title>Feature Management System</title>
-    <link rel="icon" type="image/x-icon" href="superone-icon.png">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feature Dependency Graph</title>
+  <link rel="icon" type="image/png" href="superone-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f4f2;
+      --surface: #fcfcfb;
+      --surface-2: #f0efec;
+      --border: #e2e1dc;
+      --text: #0b0b0b;
+      --text-2: #52514e;
+      --text-3: #807f79;
+      --edge: #b9b8b1;
+      --edge-hi: #2b2b29;
+      --accent: #0b0b0b;
+      --accent-ink: #fcfcfb;
+      --danger: #d03b3b;
+      --grid-dot: #d9d8d2;
+      --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.08);
+      /* categorical slots, fixed order */
+      --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100;
+      --c5: #e87ba4; --c6: #008300; --c7: #6250d6; --c8: #e34948;
+      --c-other: #8d8c86;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #33332f;
+        --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+        --edge: #4a4a45; --edge-hi: #e6e5df; --accent: #f0efec; --accent-ink: #1a1a19;
+        --danger: #e66767; --grid-dot: #2a2a27;
+        --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45);
+        --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+        --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+        --c-other: #77766f;
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #33332f;
+      --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+      --edge: #4a4a45; --edge-hi: #e6e5df; --accent: #f0efec; --accent-ink: #1a1a19;
+      --danger: #e66767; --grid-dot: #2a2a27;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45);
+      --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+      --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+      --c-other: #77766f;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 Inter, system-ui, -apple-system, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    button, input, select { font: inherit; color: inherit; }
+
+    /* ---------- top bar ---------- */
+    .topbar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+      position: relative; z-index: 5;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+    .brand img { width: 28px; height: 28px; border-radius: 8px; }
+    .brand h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -.01em; white-space: nowrap; }
+    .brand small { display: block; font-size: 12px; color: var(--text-3); font-weight: 400; }
+    .search {
+      flex: 1 1 220px; max-width: 360px; position: relative;
+    }
+    .search input {
+      width: 100%; height: 36px; padding: 0 34px 0 34px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface-2); outline: none;
+    }
+    .search input:focus { border-color: var(--text-3); background: var(--surface); }
+    .search svg { position: absolute; left: 11px; top: 11px; color: var(--text-3); }
+    .search kbd {
+      position: absolute; right: 8px; top: 8px; font: 11px Inter, sans-serif; color: var(--text-3);
+      border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; background: var(--surface);
+    }
+    .stats { display: flex; gap: 6px; flex-wrap: wrap; }
+    .stat {
+      display: flex; align-items: baseline; gap: 6px; padding: 5px 10px; border-radius: 999px;
+      background: var(--surface-2); font-size: 12px; color: var(--text-2); white-space: nowrap;
+    }
+    .stat b { color: var(--text); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .spacer { flex: 1; }
+    .actions { display: flex; gap: 6px; align-items: center; }
+    .btn {
+      height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      white-space: nowrap; transition: background .15s, border-color .15s;
+    }
+    .btn:hover { background: var(--surface-2); }
+    .btn.icon { width: 36px; padding: 0; justify-content: center; }
+    .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    .btn.primary:hover { opacity: .9; }
+    .btn.danger { color: var(--danger); }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn svg { flex: none; }
+
+    /* ---------- canvas ---------- */
+    .main { flex: 1; display: flex; min-height: 0; position: relative; }
+    .canvas {
+      flex: 1; position: relative; min-width: 0;
+      background-color: var(--surface);
+      background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+    .canvas svg { width: 100%; height: 100%; display: block; cursor: grab; }
+    .canvas svg:active { cursor: grabbing; }
+
+    .link { fill: none; stroke: var(--edge); stroke-width: 1.5px; transition: opacity .2s, stroke .2s; }
+    .link.hi { stroke: var(--edge-hi); stroke-width: 2px; }
+    .node { cursor: pointer; transition: opacity .2s; }
+    .node:focus { outline: none; }
+    .node:focus-visible circle.ring { opacity: .6; }
+    .node circle.dot { stroke: var(--surface); stroke-width: 2px; }
+    .node circle.ring { fill: none; stroke: var(--text); stroke-width: 2px; opacity: 0; }
+    .node.selected circle.ring { opacity: 1; }
+    .node.match circle.ring { opacity: .55; stroke-dasharray: 3 3; }
+    .node text {
+      font-size: 12px; font-weight: 500; fill: var(--text); text-anchor: middle; pointer-events: none;
+      paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round;
+    }
+    .faded { opacity: .12; }
+
+    .legend {
+      position: absolute; left: 16px; bottom: 16px; max-width: calc(100% - 120px);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: var(--shadow); padding: 10px 12px;
+    }
+    .legend h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
+    .legend-items { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border-radius: 999px;
+      border: 1px solid transparent; background: none; cursor: pointer; font-size: 12px; color: var(--text-2);
+    }
+    .chip:hover { background: var(--surface-2); }
+    .chip.off { opacity: .4; text-decoration: line-through; }
+    .chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+    .legend .edge-key { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); margin-top: 6px; }
+
+    .zoombar {
+      position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+    }
+    .zoombar button { width: 36px; height: 36px; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
+    .zoombar button + button { border-top: 1px solid var(--border); }
+    .zoombar button:hover { background: var(--surface-2); }
+
+    .tooltip {
+      position: absolute; pointer-events: none; z-index: 4; min-width: 160px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+      padding: 8px 10px; font-size: 12px; opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s;
+    }
+    .tooltip.show { opacity: 1; transform: none; }
+    .tooltip .t-name { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+    .tooltip .t-row { display: flex; justify-content: space-between; gap: 16px; color: var(--text-2); }
+    .tooltip .t-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .empty {
+      position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--text-2);
+    }
+    .empty.show { display: grid; }
+    .empty h2 { color: var(--text); font-size: 18px; margin: 0 0 6px; }
+    .empty p { margin: 0 0 16px; }
+
+    /* ---------- side panel ---------- */
+    .panel {
+      width: 360px; flex: none; background: var(--surface); border-left: 1px solid var(--border);
+      display: none; flex-direction: column; min-height: 0;
+    }
+    .panel.open { display: flex; }
+    .panel-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .panel-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .panel-body { padding: 16px; overflow-y: auto; flex: 1; }
+    .section { margin-bottom: 22px; }
+    .section h4 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); display: flex; justify-content: space-between; }
+    .meta { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+    .meta dt { color: var(--text-3); }
+    .meta dd { margin: 0; overflow-wrap: anywhere; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 7px; border-radius: 999px; background: var(--surface-2); font-size: 12px; }
+    .pill i { width: 8px; height: 8px; border-radius: 50%; }
+    .rel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .rel-list button {
+      width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+      border: 0; background: none; cursor: pointer; text-align: left;
+    }
+    .rel-list button:hover { background: var(--surface-2); }
+    .rel-list i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .rel-list span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rel-list small { color: var(--text-3); }
+    .muted { color: var(--text-3); font-size: 13px; }
+
+    .form { display: flex; flex-direction: column; gap: 10px; }
+    .field label { display: block; font-size: 12px; font-weight: 500; color: var(--text-2); margin-bottom: 4px; }
+    .field input, .field select {
+      width: 100%; height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--border);
+      background: var(--surface-2); outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: var(--text-3); background: var(--surface); }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+    .arrow-label { text-align: center; font-size: 12px; color: var(--text-3); }
+
+    table.list { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.list th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); padding: 0 6px 8px; }
+    table.list th.num, table.list td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    table.list td { padding: 7px 6px; border-top: 1px solid var(--border); }
+    table.list tr.clickable { cursor: pointer; }
+    table.list tr.clickable:hover td { background: var(--surface-2); }
+    table.list td .nm { display: flex; align-items: center; gap: 8px; }
+    table.list td i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+    .toasts { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .toast {
+      background: var(--text); color: var(--surface); padding: 9px 14px; border-radius: 10px; font-size: 13px;
+      box-shadow: var(--shadow); animation: pop .18s ease-out;
+    }
+    .toast.err { background: var(--danger); color: #fff; }
+    @keyframes pop { from { opacity: 0; transform: translateY(-6px); } }
+
+    @media (max-width: 760px) {
+      .topbar { padding: 10px 16px; gap: 8px; }
+      .brand small, .search kbd, .btn .lbl { display: none; }
+      .search { order: 5; flex-basis: 100%; max-width: none; }
+      .stats { display: none; }
+      .panel { position: absolute; left: 0; right: 0; bottom: 0; width: auto; height: 62%; border-left: 0; border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; box-shadow: var(--shadow); z-index: 6; }
+      .legend { max-width: calc(100% - 84px); }
+    }
+  </style>
 </head>
-
 <body>
-    <div id="app">
-        <dependency-graph :data="data"></dependency-graph>
-        <div style="padding-top: 10px; text-align: center" @click="changeData()">
-            <button>Refresh Data</button>
-        </div>
+  <header class="topbar">
+    <div class="brand">
+      <img src="superone-icon.png" alt="">
+      <h1>Feature Dependencies<small>Feature management system</small></h1>
     </div>
-    <script>
-    Vue.config.devtools = true
-    Vue.component('dependency-graph', {
-        template: `<div :style="{ width: width + 'px', height: height + 'px', border: '1px solid black' }">
-      <svg width="100%" height="100%">
-        <defs>
-          <pattern id="innerGrid" :width="innerGridSize" :height="innerGridSize" patternUnits="userSpaceOnUse">
-            <rect width="100%" height="100%" fill="none" stroke="#CCCCCC7A" stroke-width="0.5"/>
-          </pattern>
-          <pattern id="grid" :width="gridSize" :height="gridSize" patternUnits="userSpaceOnUse">
-            <rect width="100%" height="100%" fill="url(#innerGrid)" stroke="#CCCCCC7A" stroke-width="1.5"/>
-          </pattern>
-        </defs>
-      </svg>
-    </div>`,
-        props: ['data'],
-        data() {
-            return {
-                width: 1024,
-                height: 768,
-                gridSize: 10,
-                selections: {},
-                simulation: null,
-                forceProperties: {
-                    center: {
-                        x: 0.5,
-                        y: 0.5
-                    },
-                    charge: {
-                        enabled: true,
-                        strength: -1000,
-                        distanceMin: 100,
-                        distanceMax: 200
-                    },
-                    collide: {
-                        enabled: true,
-                        strength: 0.5,
-                        iterations: 100,
-                        radius: 70
-                    },
-                    forceX: {
-                        enabled: true,
-                        strength: 0.10,
-                        x: 0.5
-                    },
-                    forceY: {
-                        enabled: true,
-                        strength: 0.15,
-                        y: 0.5
-                    },
-                    link: {
-                        enabled: true,
-                        distance: 50,
-                        iterations: 10
-                    }
-                },
-            }
+    <div class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="Search features or classes" autocomplete="off" aria-label="Search features">
+      <kbd>/</kbd>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="spacer"></div>
+    <div class="actions">
+      <button class="btn" id="btn-list" title="All features as a table">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span class="lbl">List</span>
+      </button>
+      <button class="btn icon" id="btn-refresh" title="Reload data">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <button class="btn icon" id="btn-theme" title="Toggle theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button class="btn primary" id="btn-manage">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="lbl" id="manage-lbl">Manage</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="canvas" id="canvas">
+      <svg id="graph" role="img" aria-label="Feature dependency graph"></svg>
+      <div class="tooltip" id="tooltip"></div>
+      <div class="legend" id="legend" hidden></div>
+      <div class="zoombar">
+        <button id="zoom-in" title="Zoom in" aria-label="Zoom in"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button id="zoom-out" title="Zoom out" aria-label="Zoom out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        <button id="zoom-fit" title="Fit to screen" aria-label="Fit to screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+      <div class="empty" id="empty">
+        <div>
+          <h2>No features yet</h2>
+          <p>Add your first feature to start mapping dependencies.</p>
+          <button class="btn primary" id="empty-add">Add a feature</button>
+        </div>
+      </div>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite">
+      <div class="panel-head">
+        <h2 id="panel-title"></h2>
+        <button class="btn icon" id="panel-close" title="Close" aria-label="Close panel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+  </div>
+  <div class="toasts" id="toasts"></div>
+
+<script>
+(() => {
+  const SLOTS = 8;
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+  };
+
+  const state = {
+    token: store.get('fd-token'),
+    user: store.get('fd-user'),
+    nodes: [], links: [], byKey: new Map(), classes: [],
+    hiddenClasses: new Set(),
+    selected: null, hovered: null, query: '',
+    panel: null, // 'details' | 'manage' | 'login' | 'list'
+  };
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  function h(tag, attrs = {}, ...children) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k === 'style') el.style.cssText = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const c of children.flat(Infinity)) if (c != null) el.append(c.nodeType ? c : String(c));
+    return el;
+  }
+  function toast(msg, err = false) {
+    const t = h('div', { class: 'toast' + (err ? ' err' : '') }, msg);
+    $('toasts').append(t);
+    setTimeout(() => t.remove(), 3200);
+  }
+  const colorOf = (cls) => {
+    const i = state.classes.indexOf(cls);
+    return i > -1 && i < SLOTS ? `var(--c${i + 1})` : 'var(--c-other)';
+  };
+  const legendKey = (cls) => state.classes.indexOf(cls) < SLOTS ? cls : '__other';
+
+  async function api(method, path, body) {
+    const res = await fetch('/api' + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(state.token && { authToken: state.token }) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let json = null;
+    try { json = await res.json(); } catch {}
+    if (res.status === 401 || (res.status === 400 && json?.message === 'Invalid Token')) {
+      setSession(null);
+      throw new Error('Session expired, please sign in again');
+    }
+    if (!res.ok) throw new Error(typeof json?.message === 'string' ? json.message : `Request failed (${res.status})`);
+    return json;
+  }
+
+  function setSession(token, user) {
+    state.token = token; state.user = token ? user : null;
+    store.set('fd-token', token); store.set('fd-user', token ? user : null);
+    $('manage-lbl').textContent = token ? 'Manage' : 'Sign in';
+  }
+
+  // ---------- data ----------
+  async function fetchRaw() {
+    if (state.token) {
+      try {
+        const [nodes, links] = await Promise.all([api('GET', '/read'), api('GET', '/links')]);
+        return { nodes, links };
+      } catch (e) { if (state.token) throw e; }
+    }
+    const res = await fetch('data3.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Could not load graph data');
+    return res.json();
+  }
+
+  function normalize(raw) {
+    const prev = new Map(state.nodes.map((n) => [n.key, n]));
+    const nodes = (raw.nodes || []).filter((n) => !n.disabled).map((n, i) => {
+      const key = n._id || `n${n.id ?? i}`;
+      const old = prev.get(key);
+      return {
+        key, id: n.id ?? i, name: n.name, group: n.group, cls: n.class || 'unclassified',
+        x: old?.x, y: old?.y, vx: old?.vx, vy: old?.vy,
+        out: [], in: [],
+      };
+    });
+    const byKey = new Map(nodes.map((n) => [n.key, n]));
+    const byNum = new Map(nodes.map((n, i) => [String(n.id), n]));
+    const resolve = (objId, num) => byKey.get(String(objId)) || byNum.get(String(num));
+    const links = [];
+    for (const l of raw.links || []) {
+      const s = resolve(l.sourceId, l.source), t = resolve(l.targetId, l.target);
+      if (!s || !t) continue;
+      links.push({ key: l._id || `${s.key}>${t.key}`, source: s, target: t, type: l.type || 'needs' });
+      if (!s.out.includes(t)) { s.out.push(t); t.in.push(s); }
+    }
+    const pairs = new Set(links.map((l) => l.source.key + '>' + l.target.key));
+    for (const l of links) l.curved = pairs.has(l.target.key + '>' + l.source.key) && l.source !== l.target;
+    for (const n of nodes) n.r = 9 + 3.2 * Math.sqrt(n.in.length + n.out.length);
+
+    state.nodes = nodes; state.links = links; state.byKey = byKey;
+    state.classes = [...new Set(nodes.map((n) => n.cls))].sort((a, b) => a.localeCompare(b));
+    if (state.selected) state.selected = byKey.get(state.selected.key) || null;
+  }
+
+  async function load({ refit = false } = {}) {
+    try {
+      normalize(await fetchRaw());
+      render(refit);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  // ---------- graph ----------
+  const svg = d3.select('#graph');
+  const defs = svg.append('defs');
+  for (const [id, color] of [['arrow', 'var(--edge)'], ['arrow-hi', 'var(--edge-hi)']]) {
+    defs.append('marker').attr('id', id).attr('viewBox', '0 -5 10 10').attr('refX', 9).attr('refY', 0)
+      .attr('markerWidth', 9).attr('markerHeight', 9).attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-4.5L10,0L0,4.5Z').style('fill', color);
+  }
+  const viewport = svg.append('g');
+  const linkLayer = viewport.append('g');
+  const nodeLayer = viewport.append('g');
+  let linkSel = linkLayer.selectAll('path');
+  let nodeSel = nodeLayer.selectAll('g');
+  let fittedOnce = false;
+
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (e) => viewport.attr('transform', e.transform));
+  svg.call(zoom).on('dblclick.zoom', null);
+  svg.on('click', (e) => { if (e.target === svg.node()) select(null); });
+
+  const sim = d3.forceSimulation()
+    .force('link', d3.forceLink().id((d) => d.key).distance((l) => 70 + l.source.r + l.target.r).strength(0.6))
+    .force('charge', d3.forceManyBody().strength(-520).distanceMax(600))
+    .force('collide', d3.forceCollide().radius((d) => d.r + 22).iterations(2))
+    .force('x', d3.forceX().strength(0.05))
+    .force('y', d3.forceY().strength(0.07))
+    .on('tick', tick);
+
+  function linkPath(l) {
+    const s = l.source, t = l.target;
+    if (s === t) {
+      const x = s.x, y = s.y - s.r;
+      return `M${x - 5},${y + 1} C${x - 34},${y - 46} ${x + 34},${y - 46} ${x + 5},${y + 1}`;
+    }
+    const dx = t.x - s.x, dy = t.y - s.y, d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d, uy = dy / d;
+    const sx = s.x + ux * s.r, sy = s.y + uy * s.r;
+    const tx = t.x - ux * (t.r + 3), ty = t.y - uy * (t.r + 3);
+    if (l.curved) {
+      const mx = (sx + tx) / 2 - uy * d * 0.18, my = (sy + ty) / 2 + ux * d * 0.18;
+      return `M${sx},${sy} Q${mx},${my} ${tx},${ty}`;
+    }
+    return `M${sx},${sy} L${tx},${ty}`;
+  }
+
+  function tick() {
+    linkSel.attr('d', linkPath);
+    nodeSel.attr('transform', (d) => `translate(${d.x},${d.y})`);
+  }
+
+  function render(refit) {
+    const { nodes, links } = state;
+    $('empty').classList.toggle('show', nodes.length === 0);
+
+    linkSel = linkLayer.selectAll('path').data(links, (d) => d.key)
+      .join('path').attr('class', 'link').attr('marker-end', 'url(#arrow)');
+
+    nodeSel = nodeLayer.selectAll('g.node').data(nodes, (d) => d.key).join((enter) => {
+      const g = enter.append('g').attr('class', 'node').attr('tabindex', 0);
+      g.append('circle').attr('class', 'ring');
+      g.append('circle').attr('class', 'dot');
+      g.append('text');
+      return g;
+    });
+    nodeSel.select('circle.ring').attr('r', (d) => d.r + 5);
+    nodeSel.select('circle.dot').attr('r', (d) => d.r).style('fill', (d) => colorOf(d.cls));
+    nodeSel.select('text').attr('y', (d) => d.r + 15).text((d) => d.name);
+    nodeSel
+      .on('mouseenter', (e, d) => { state.hovered = d; applyFocus(); showTip(e, d); })
+      .on('mousemove', (e, d) => showTip(e, d))
+      .on('mouseleave', () => { state.hovered = null; applyFocus(); hideTip(); })
+      .on('click', (e, d) => { e.stopPropagation(); select(d, { center: isNarrow() }); })
+      .on('keydown', (e, d) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(d); } })
+      .call(d3.drag()
+        .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.25).restart(); d.fx = d.x; d.fy = d.y; hideTip(); })
+        .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+        .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+    const isNew = nodes.some((n) => n.x == null);
+    sim.nodes(nodes);
+    sim.force('link').links(links);
+    if (isNew || refit || !fittedOnce) {
+      // settle the layout up front so the first paint is already arranged and framed
+      sim.alpha(1).stop();
+      sim.tick(300);
+      tick();
+      fit(fittedOnce ? 600 : 0);
+      fittedOnce = true;
+      sim.alpha(0.02).restart();
+    } else {
+      sim.alpha(0.3).restart();
+    }
+
+    renderStats(); renderLegend(); applyFocus(); renderPanel();
+  }
+
+  // focus: hover > selection > search
+  function applyFocus() {
+    const visible = (n) => !state.hiddenClasses.has(legendKey(n.cls));
+    nodeSel.style('display', (d) => visible(d) ? null : 'none');
+    linkSel.style('display', (d) => visible(d.source) && visible(d.target) ? null : 'none');
+
+    const focus = state.hovered || state.selected;
+    const q = state.query.trim().toLowerCase();
+    const matches = q ? new Set(state.nodes.filter((n) => n.name.toLowerCase().includes(q) || n.cls.toLowerCase().includes(q))) : null;
+
+    let lit = null;
+    if (focus) lit = new Set([focus, ...focus.in, ...focus.out]);
+    else if (matches?.size) lit = matches;
+
+    nodeSel.classed('faded', (d) => lit ? !lit.has(d) : false)
+      .classed('selected', (d) => d === state.selected)
+      .classed('match', (d) => !focus && !!matches && matches.has(d));
+    linkSel
+      .classed('faded', (d) => focus ? !(d.source === focus || d.target === focus) : !!lit)
+      .classed('hi', (d) => !!focus && (d.source === focus || d.target === focus))
+      .attr('marker-end', (d) => focus && (d.source === focus || d.target === focus) ? 'url(#arrow-hi)' : 'url(#arrow)');
+    linkSel.filter('.hi').raise();
+  }
+
+  function select(d, { center = false } = {}) {
+    state.selected = d;
+    if (d) { state.panel = 'details'; if (center) centerOn(d); }
+    else if (state.panel === 'details') state.panel = null;
+    applyFocus(); renderPanel();
+  }
+
+  // ---------- zoom helpers ----------
+  function fit(duration = 600) {
+    const vis = state.nodes.filter((n) => !state.hiddenClasses.has(legendKey(n.cls)) && n.x != null);
+    if (!vis.length) return;
+    const { width, height } = svg.node().getBoundingClientRect();
+    const pad = Math.min(80, width * 0.06);
+    const x0 = d3.min(vis, (n) => n.x - n.r), x1 = d3.max(vis, (n) => n.x + n.r);
+    const y0 = d3.min(vis, (n) => n.y - n.r), y1 = d3.max(vis, (n) => n.y + n.r + 20);
+    const k = Math.min(1.25, (width - pad * 2) / Math.max(1, x1 - x0), (height - pad * 2) / Math.max(1, y1 - y0));
+    const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
+    svg.transition().duration(duration).call(zoom.transform, t);
+  }
+  const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
+  function centerOn(d) {
+    const { width, height } = svg.node().getBoundingClientRect();
+    const k = Math.max(isNarrow() ? 0.9 : 1.1, d3.zoomTransform(svg.node()).k);
+    // on phones the panel is a bottom sheet over ~62% of the canvas, so aim for the strip above it
+    const cy = isNarrow() ? height * 0.19 : height / 2;
+    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(width / 2, cy).scale(k).translate(-d.x, -d.y));
+  }
+  $('zoom-in').onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1.3);
+  $('zoom-out').onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1 / 1.3);
+  $('zoom-fit').onclick = () => fit();
+
+  // ---------- tooltip ----------
+  const tip = $('tooltip');
+  function showTip(e, d) {
+    tip.replaceChildren(
+      h('div', { class: 't-name' }, d.name),
+      h('div', { class: 't-row' }, h('span', {}, h('span', { class: 'pill' }, h('i', { style: `background:${colorOf(d.cls)}` }), d.cls))),
+      h('div', { class: 't-row', style: 'margin-top:6px' }, 'Depends on', h('b', {}, d.out.length)),
+      h('div', { class: 't-row' }, 'Required by', h('b', {}, d.in.length)),
+    );
+    const box = $('canvas').getBoundingClientRect();
+    let x = e.clientX - box.left + 14, y = e.clientY - box.top + 14;
+    if (x + 200 > box.width) x -= 228;
+    if (y + 110 > box.height) y -= 124;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    tip.classList.add('show');
+  }
+  function hideTip() { tip.classList.remove('show'); }
+
+  // ---------- stats & legend ----------
+  function renderStats() {
+    const roots = state.nodes.filter((n) => n.out.length === 0).length;
+    $('stats').replaceChildren(
+      h('div', { class: 'stat' }, h('b', {}, state.nodes.length), 'features'),
+      h('div', { class: 'stat' }, h('b', {}, state.links.length), 'dependencies'),
+      h('div', { class: 'stat', title: 'Features that depend on nothing' }, h('b', {}, roots), 'foundational'),
+    );
+  }
+
+  function renderLegend() {
+    const legend = $('legend');
+    legend.hidden = state.classes.length === 0;
+    const keys = state.classes.slice(0, SLOTS);
+    const items = keys.map((cls) => ({ key: cls, label: cls, color: colorOf(cls), count: state.nodes.filter((n) => n.cls === cls).length }));
+    if (state.classes.length > SLOTS) {
+      items.push({ key: '__other', label: 'Other', color: 'var(--c-other)', count: state.nodes.filter((n) => legendKey(n.cls) === '__other').length });
+    }
+    legend.replaceChildren(
+      h('h3', {}, 'Classes'),
+      h('div', { class: 'legend-items' }, items.map((it) => h('button', {
+        class: 'chip' + (state.hiddenClasses.has(it.key) ? ' off' : ''),
+        title: state.hiddenClasses.has(it.key) ? 'Show' : 'Hide',
+        'aria-pressed': String(!state.hiddenClasses.has(it.key)),
+        onclick: () => {
+          state.hiddenClasses.has(it.key) ? state.hiddenClasses.delete(it.key) : state.hiddenClasses.add(it.key);
+          if (state.selected && state.hiddenClasses.has(legendKey(state.selected.cls))) select(null);
+          renderLegend(); applyFocus();
         },
-        computed: {
-            innerGridSize() { return this.gridSize / 10 },
-            nodes() { return this.data.nodes },
-            links() { return this.data.links },
-            // These are needed for captions
-            linkTypes() {
-                const linkTypes = []
-                this.links.forEach(link => {
-                    if (linkTypes.indexOf(link.type) === -1)
-                        linkTypes.push(link.type)
-                })
-                return linkTypes.sort()
-            },
-            classes() {
-                const classes = []
-                this.nodes.forEach(node => {
-                    if (classes.indexOf(node.class) === -1)
-                        classes.push(node.class)
-                })
-                return classes.sort()
-            },
-        },
-        created() {
-            // You can set the component width and height in any way
-            // you prefer. It's responsive! :)
-            this.width = window.innerWidth - 10
-            this.height = window.innerHeight - 40
+      }, h('i', { style: `background:${it.color}` }), `${it.label} · ${it.count}`))),
+      h('div', { class: 'edge-key' },
+        svgEl(`<svg width="28" height="10" aria-hidden="true"><line x1="1" y1="5" x2="20" y2="5" stroke="var(--edge-hi)" stroke-width="1.5"/><path d="M19,1.5L27,5L19,8.5Z" fill="var(--edge-hi)"/></svg>`),
+        h('span', { style: 'white-space:nowrap' }, 'A → B means A needs B')),
+    );
+  }
+  function svgEl(markup) { const t = document.createElement('template'); t.innerHTML = markup; return t.content.firstChild; }
 
-            this.simulation = d3.forceSimulation()
-                .force("link", d3.forceLink())
-                .force("charge", d3.forceManyBody())
-                .force("collide", d3.forceCollide())
-                .force("center", d3.forceCenter())
-                .force("forceX", d3.forceX())
-                .force("forceY", d3.forceY())
-                .on("tick", this.tick)
-            // Call first time to setup default values
-            this.updateForces()
-        },
-        mounted() {
-            this.selections.svg = d3.select(this.$el.querySelector("svg"))
-            const svg = this.selections.svg
+  // ---------- panel ----------
+  function openPanel(kind) { state.panel = kind; renderPanel(); }
+  $('panel-close').onclick = () => { if (state.panel === 'details') select(null); else openPanel(null); };
 
-            // Define the arrow marker
-            svg.append("svg:defs").selectAll("marker")
-                .data(["end"]) // Different link/path types can be defined here
-                .enter().append("svg:marker") // This section adds in the arrows
-                .attr("id", String)
-                .attr("viewBox", "0 -5 10 10")
-                .attr("refX", 43) // Prevents arrowhead from being covered by circle
-                .attr("refY", 0)
-                .attr("markerWidth", 6)
-                .attr("markerHeight", 6)
-                .attr("orient", "auto")
-                .append("svg:path")
-                .attr("d", "M0,-5L10,0L0,5");
+  function renderPanel() {
+    const panel = $('panel'), body = $('panel-body'), title = $('panel-title');
+    panel.classList.toggle('open', !!state.panel);
+    if (!state.panel) return;
+    if (state.panel === 'details' && !state.selected) { openPanel(null); return; }
+    const views = { details: viewDetails, manage: viewManage, login: viewLogin, list: viewList };
+    const [t, content] = views[state.panel]();
+    title.textContent = t;
+    body.replaceChildren(...[content].flat());
+  }
 
-            // Define arrow for self-links
-            svg.append("svg:defs").selectAll("marker")
-                .data(["end-self"])
-                .enter().append("svg:marker") // This section adds in the arrows
-                .attr("id", String)
-                .attr("viewBox", "0 -5 10 10")
-                .attr("refX", 40)
-                .attr("refY", -15)
-                .attr("markerWidth", 6)
-                .attr("markerHeight", 6)
-                .attr("orient", 285)
-                .append("svg:path")
-                .attr("d", "M0,-5L10,0L0,5");
+  function relList(nodes, empty) {
+    if (!nodes.length) return h('p', { class: 'muted' }, empty);
+    return h('ul', { class: 'rel-list' }, [...nodes].sort((a, b) => a.name.localeCompare(b.name)).map((n) =>
+      h('li', {}, h('button', { onclick: () => select(n, { center: true }) },
+        h('i', { style: `background:${colorOf(n.cls)}` }), h('span', {}, n.name), h('small', {}, n.cls)))));
+  }
 
-            // Add zoom and panning triggers
-            this.zoom = d3.zoom()
-                .scaleExtent([1 / 4, 4])
-                .on('zoom', this.zoomed)
-            svg.call(this.zoom)
-
-            // A background grid to help user experience
-            // The width and height depends on the minimum scale extent and
-            // the + 10% and negative index to create an infinite grid feel
-            // The precedence of this element is important since you'll have
-            // click events on the elements above the grid
-            this.selections.grid = svg.append('rect')
-                .attr('x', '-10%')
-                .attr('y', '-10%')
-                .attr('width', '410%')
-                .attr('height', '410%')
-                .attr('fill', 'url(#grid)')
-
-            this.selections.graph = svg.append("g")
-            const graph = this.selections.graph
-
-            // Node and link count is nice :)
-            this.selections.stats = svg.append('text')
-                .attr('x', '1%')
-                .attr('y', '98%')
-                .attr('text-anchor', 'left');
-
-            // Some caption
-            this.selections.caption = svg.append('g');
-            this.selections.caption.append('rect')
-                .attr('width', '200')
-                .attr('height', '0')
-                .attr('rx', '10')
-                .attr('ry', '10')
-                .attr('class', 'caption');
-        },
-        methods: {
-            tick() {
-                // If no data is passed to the Vue component, do nothing
-                if (!this.data) { return }
-                const transform = d => {
-                    return "translate(" + d.x + "," + d.y + ")"
-                }
-
-                const link = d => {
-                    // Self-link support
-                    if (d.source.index === d.target.index) {
-                        return `M${d.source.x-1},${d.source.y-1}A30,30 -10,1,0 ${d.target.x+1},${d.target.y+1}`;
-                    } else {
-                        return "M" + d.source.x + "," + d.source.y + " L" + d.target.x + "," + d.target.y;
-                    }
-                }
-
-                const graph = this.selections.graph
-                graph.selectAll("path").attr("d", link)
-                graph.selectAll("circle").attr("transform", transform)
-                graph.selectAll("text").attr("transform", transform)
-
-                this.updateNodeLinkCount()
-            },
-            updateData() {
-                this.simulation.nodes(this.nodes)
-                this.simulation.force("link").links(this.links)
-
-                const simulation = this.simulation
-                const graph = this.selections.graph
-
-                // Links should only exit if not needed anymore
-                graph.selectAll("path")
-                    .data(this.links)
-                    .exit().remove()
-
-                graph.selectAll("path")
-                    .data(this.links)
-                    .enter().append("path")
-                    .attr("class", d => "link " + d.type)
-
-                // Nodes should always be redrawn to avoid lines above them
-                graph.selectAll("circle").remove()
-                graph.selectAll("circle")
-                    .data(this.nodes)
-                    .enter().append("circle")
-                    .attr("r", 30)
-                    .attr("class", d => d.class)
-                    .call(d3.drag()
-                        .on('start', this.nodeDragStarted)
-                        .on('drag', this.nodeDragged)
-                        .on('end', this.nodeDragEnded))
-                    .on('mouseover', this.nodeMouseOver)
-                    .on('mouseout', this.nodeMouseOut)
-                    .on('click', this.nodeClick)
-
-                graph.selectAll("text").remove()
-                graph.selectAll("text")
-                    .data(this.nodes)
-                    .enter().append("text")
-                    .attr("x", 0)
-                    .attr("y", ".31em")
-                    .attr("text-anchor", "middle")
-                    .text(d => d.name)
-
-                // Add 'marker-end' attribute to each path
-                const svg = d3.select(this.$el.querySelector("svg"))
-                svg.selectAll("g").selectAll("path").attr("marker-end", d => {
-                    // Caption items doesn't have source and target
-                    if (d.source && d.target &&
-                        d.source.index === d.target.index) return "url(#end-self)";
-                    else return "url(#end)";
-                });
-
-                // Update caption every time data changes
-                this.updateCaption()
-                simulation.alpha(1).restart()
-            },
-            updateForces() {
-                const { simulation, forceProperties, width, height } = this
-                simulation.force("center")
-                    .x(width * forceProperties.center.x)
-                    .y(height * forceProperties.center.y)
-                simulation.force("charge")
-                    .strength(forceProperties.charge.strength * forceProperties.charge.enabled)
-                    .distanceMin(forceProperties.charge.distanceMin)
-                    .distanceMax(forceProperties.charge.distanceMax)
-                simulation.force("collide")
-                    .strength(forceProperties.collide.strength * forceProperties.collide.enabled)
-                    .radius(forceProperties.collide.radius)
-                    .iterations(forceProperties.collide.iterations)
-                simulation.force("forceX")
-                    .strength(forceProperties.forceX.strength * forceProperties.forceX.enabled)
-                    .x(width * forceProperties.forceX.x)
-                simulation.force("forceY")
-                    .strength(forceProperties.forceY.strength * forceProperties.forceY.enabled)
-                    .y(height * forceProperties.forceY.y)
-                simulation.force("link")
-                    .distance(forceProperties.link.distance)
-                    .iterations(forceProperties.link.iterations)
-
-                // updates ignored until this is run
-                // restarts the simulation (important if simulation has already slowed down)
-                simulation.alpha(1).restart()
-            },
-            updateNodeLinkCount() {
-                let nodeCount = this.nodes.length;
-                let linkCount = this.links.length;
-
-                const highlightedNodes = this.selections.graph.selectAll("circle.highlight");
-                const highlightedLinks = this.selections.graph.selectAll("path.highlight");
-                if (highlightedNodes.size() > 0 || highlightedLinks.size() > 0) {
-                    nodeCount = highlightedNodes.size()
-                    linkCount = highlightedLinks.size()
-                }
-                this.selections.stats.text('Nodes: ' + nodeCount + ' / Edges: ' + linkCount);
-            },
-            updateCaption() { // right bottom UI
-                // WARNING: Some gross math will happen here!
-                const lineHeight = 30
-                const lineMiddle = (lineHeight / 2)
-                const captionXPadding = 28
-                const captionYPadding = 5
-
-                const caption = this.selections.caption;
-                caption.select('rect')
-                    .attr('height', (captionYPadding * 2) + lineHeight *
-                        (this.classes.length + this.linkTypes.length))
-
-                const linkLine = (d) => {
-                    const source = {
-                        x: captionXPadding + 13,
-                        y: captionYPadding + (lineMiddle + 1) + (lineHeight * this.linkTypes.indexOf(d)),
-                    }
-                    const target = {
-                        x: captionXPadding - 10,
-                    }
-                    return 'M' + source.x + ',' + source.y + 'H' + target.x
-                }
-
-                caption.selectAll('g').remove();
-                const linkCaption = caption.append('g');
-                linkCaption.selectAll('path')
-                    .data(this.linkTypes)
-                    .enter().append('path')
-                    .attr('d', linkLine)
-                    .attr('class', (d) => 'link ' + d)
-
-                linkCaption.selectAll('text')
-                    .data(this.linkTypes)
-                    .enter().append('text')
-                    .attr('x', captionXPadding + 20)
-                    .attr('y', (d) => captionYPadding + (lineMiddle + 5) +
-                        (lineHeight * this.linkTypes.indexOf(d)))
-                    .attr('class', 'caption')
-                    .text((d) => d);
-
-                const classCaption = caption.append('g');
-                classCaption.selectAll('circle')
-                    .data(this.classes)
-                    .enter().append('circle')
-                    .attr('r', 10)
-                    .attr('cx', captionXPadding - 2)
-                    .attr('cy', (d) => captionYPadding + lineMiddle +
-                        (lineHeight * (this.linkTypes.length + this.classes.indexOf(d))))
-                    .attr('class', (d) => d.toLowerCase());
-
-                classCaption.selectAll('text')
-                    .data(this.classes)
-                    .enter().append('text')
-                    .attr('x', captionXPadding + 20)
-                    .attr('y', (d) => captionYPadding + (lineMiddle + 5) +
-                        (lineHeight * (this.linkTypes.length + this.classes.indexOf(d))))
-                    .attr('class', 'caption')
-                    .text((d) => d);
-
-                const captionWidth = caption.node().getBBox().width;
-                const captionHeight = caption.node().getBBox().height;
-                const paddingX = 18;
-                const paddingY = 12;
-                caption
-                    .attr('transform', 'translate(' +
-                        (this.width - captionWidth - paddingX) + ', ' +
-                        (this.height - captionHeight - paddingY) + ')');
-            },
-            zoomed() {
-                const transform = d3.event.transform
-                // The trick here is to move the grid in a way that the user doesn't perceive
-                // that the axis aren't really moving
-                // The actual movement is between 0 and gridSize only for x and y
-                const translate = transform.x % (this.gridSize * transform.k) + ',' +
-                    transform.y % (this.gridSize * transform.k)
-                this.selections.grid.attr('transform', 'translate(' +
-                    translate + ') scale(' + transform.k + ')')
-                this.selections.graph.attr('transform', transform)
-
-                // Define some world boundaries based on the graph total size
-                // so we don't scroll indefinitely
-                const graphBox = this.selections.graph.node().getBBox()
-                const margin = 100
-                const worldTopLeft = [graphBox.x - margin, graphBox.y - margin]
-                const worldBottomRight = [
-                    graphBox.x + graphBox.width + margin,
-                    graphBox.y + graphBox.height + margin
-                ]
-                this.zoom.translateExtent([worldTopLeft, worldBottomRight])
-            },
-            nodeDragStarted(d) {
-                if (!d3.event.active) { this.simulation.alphaTarget(0.3).restart() }
-                d.fx = d.x
-                d.fy = d.y
-            },
-            nodeDragged(d) {
-                d.fx = d3.event.x
-                d.fy = d3.event.y
-            },
-            nodeDragEnded(d) {
-                if (!d3.event.active) { this.simulation.alphaTarget(0.0001) }
-                d.fx = null
-                d.fy = null
-            },
-            nodeMouseOver(d) {
-                const graph = this.selections.graph
-                const circle = graph.selectAll("circle")
-                const path = graph.selectAll("path")
-                const text = graph.selectAll("text")
-
-                const related = []
-                const relatedLinks = []
-                related.push(d)
-                this.simulation.force('link').links().forEach((link) => {
-                    if (link.source === d || link.target === d) {
-                        relatedLinks.push(link)
-                        if (related.indexOf(link.source) === -1) { related.push(link.source) }
-                        if (related.indexOf(link.target) === -1) { related.push(link.target) }
-                    }
-                })
-                circle.classed('faded', true)
-                circle
-                    .filter((df) => related.indexOf(df) > -1)
-                    .classed('highlight', true)
-                path.classed('faded', true)
-                path
-                    .filter((df) => df.source === d || df.target === d)
-                    .classed('highlight', true)
-                text.classed('faded', true)
-                text
-                    .filter((df) => related.indexOf(df) > -1)
-                    .classed('highlight', true)
-                // This ensures that tick is called so the node count is updated
-                this.simulation.alphaTarget(0.0001).restart()
-            },
-            nodeMouseOut(d) {
-                const graph = this.selections.graph
-                const circle = graph.selectAll("circle")
-                const path = graph.selectAll("path")
-                const text = graph.selectAll("text")
-
-                circle.classed('faded', false)
-                circle.classed('highlight', false)
-                path.classed('faded', false)
-                path.classed('highlight', false)
-                text.classed('faded', false)
-                text.classed('highlight', false)
-                // This ensures that tick is called so the node count is updated
-                this.simulation.restart()
-            },
-            nodeClick(d) {
-                const circle = this.selections.graph.selectAll("circle")
-                circle.classed('selected', false)
-                circle.filter((td) => td === d)
-                    .classed('selected', true)
-            },
-        },
-        watch: {
-            data: {
-                handler(newData) {
-                    this.updateData()
-                },
-                deep: true
-            },
-            forceProperties: {
-                handler(newForce) {
-                    this.updateForces()
-                },
-                deep: true
-            }
-        }
-    })
-
-    new Vue({
-        el: '#app',
-        data() {
-            return {
-                data: null,
-                dataList: ['data3.json'],
-            }
-        },
-        mounted() {
-            this.changeData();
-        },
-        methods: {
-            changeData() {
-                const dataIndex = Math.floor(Math.random() * this.dataList.length)
-                d3.json(this.dataList[dataIndex]).then(data => {
-                    this.data = data
-                }).catch(error => {
-                    console.error('Cannot proceed with simulation, failed to  retrieve data.')
-                })
-            }
-        }
-    })
-    </script>
-    <style>
-    .faded {
-        opacity: 0.1;
-        transition: 0.3s opacity;
+  function viewDetails() {
+    const d = state.selected;
+    const out = [
+      h('div', { class: 'section' },
+        h('dl', { class: 'meta' },
+          h('dt', {}, 'Class'), h('dd', {}, h('span', { class: 'pill' }, h('i', { style: `background:${colorOf(d.cls)}` }), d.cls)),
+          h('dt', {}, 'Group'), h('dd', {}, d.group ?? '—'),
+          h('dt', {}, 'Graph index'), h('dd', {}, d.id),
+        )),
+      h('div', { class: 'section' }, h('h4', {}, 'Depends on', h('span', {}, d.out.length)), relList(d.out, 'No dependencies — this is a foundational feature.')),
+      h('div', { class: 'section' }, h('h4', {}, 'Required by', h('span', {}, d.in.length)), relList(d.in, 'Nothing depends on this feature yet.')),
+    ];
+    if (state.token && !d.key.startsWith('n')) {
+      const name = h('input', { value: d.name, required: true });
+      const group = h('input', { value: d.group ?? '', required: true });
+      const cls = h('input', { value: d.cls, list: 'class-options', required: true });
+      const others = state.nodes.filter((n) => n !== d && !d.out.includes(n)).sort((a, b) => a.name.localeCompare(b.name));
+      const dep = h('select', {}, h('option', { value: '' }, 'Choose a feature…'), others.map((n) => h('option', { value: n.key }, n.name)));
+      out.push(
+        h('div', { class: 'section' }, h('h4', {}, 'Add dependency'),
+          h('form', { class: 'form', onsubmit: (e) => { e.preventDefault(); if (dep.value) addDependency(d.key, dep.value); } },
+            h('div', { class: 'field' }, h('label', {}, `${d.name} needs`), dep),
+            h('button', { class: 'btn', type: 'submit' }, 'Add dependency'))),
+        h('div', { class: 'section' }, h('h4', {}, 'Edit feature'),
+          h('form', { class: 'form', onsubmit: (e) => { e.preventDefault(); updateFeature(d.key, name.value, group.value, cls.value); } },
+            h('div', { class: 'field' }, h('label', {}, 'Name'), name),
+            h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', {}, 'Group'), group), h('div', { class: 'field' }, h('label', {}, 'Class'), cls)),
+            classDatalist(),
+            h('div', { class: 'row' },
+              h('button', { class: 'btn primary', type: 'submit' }, 'Save changes'),
+              h('button', { class: 'btn danger', type: 'button', onclick: () => deleteFeature(d) }, 'Delete')))),
+      );
+    } else if (!state.token) {
+      out.push(h('p', { class: 'muted' }, 'Sign in to edit this feature or add dependencies.'));
     }
+    return [d.name, out];
+  }
 
-    .highlight {
-        opacity: 1;
-    }
+  function classDatalist() {
+    return h('datalist', { id: 'class-options' }, state.classes.map((c) => h('option', { value: c })));
+  }
 
-    path.link {
-        fill: none;
-        stroke: #666;
-        stroke-width: 1.5px;
-    }
+  function viewManage() {
+    if (!state.token) return viewLogin();
+    const name = h('input', { required: true, placeholder: 'e.g. checkout' });
+    const group = h('input', { required: true, placeholder: 'e.g. 1', value: '1' });
+    const cls = h('input', { required: true, list: 'class-options', placeholder: 'e.g. payment' });
+    const sorted = [...state.nodes].sort((a, b) => a.name.localeCompare(b.name));
+    const opts = () => [h('option', { value: '' }, 'Choose…'), sorted.map((n) => h('option', { value: n.key }, n.name))];
+    const from = h('select', { required: true }, opts());
+    const to = h('select', { required: true }, opts());
+    return ['Manage features', [
+      h('div', { class: 'section' }, h('h4', {}, 'New feature'),
+        h('form', { class: 'form', onsubmit: async (e) => { e.preventDefault(); if (await createFeature(name.value, group.value, cls.value)) e.target.reset(); } },
+          h('div', { class: 'field' }, h('label', {}, 'Name'), name),
+          h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', {}, 'Group'), group), h('div', { class: 'field' }, h('label', {}, 'Class'), cls)),
+          classDatalist(),
+          h('button', { class: 'btn primary', type: 'submit' }, 'Create feature'))),
+      h('div', { class: 'section' }, h('h4', {}, 'New dependency'),
+        sorted.length < 2 ? h('p', { class: 'muted' }, 'Create at least two features first.') :
+        h('form', { class: 'form', onsubmit: (e) => { e.preventDefault(); addDependency(from.value, to.value); } },
+          h('div', { class: 'field' }, h('label', {}, 'Feature'), from),
+          h('div', { class: 'arrow-label' }, 'needs ↓'),
+          h('div', { class: 'field' }, h('label', {}, 'Dependency'), to),
+          h('button', { class: 'btn primary', type: 'submit' }, 'Add dependency'))),
+      h('div', { class: 'section' }, h('h4', {}, 'Session'),
+        h('p', { class: 'muted', style: 'margin:0 0 8px' }, `Signed in as ${state.user}`),
+        h('button', { class: 'btn', onclick: () => { setSession(null); toast('Signed out'); openPanel(null); load(); } }, 'Sign out')),
+    ]];
+  }
 
-    path.link.depends {
-        stroke: #005900;
-        stroke-dasharray: 5, 2;
-    }
+  function viewLogin() {
+    const user = h('input', { type: 'email', required: true, autocomplete: 'username', placeholder: 'you@example.com' });
+    const pass = h('input', { type: 'password', required: true, autocomplete: 'current-password' });
+    const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Sign in');
+    setTimeout(() => user.focus(), 0);
+    return ['Sign in', [
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Sign in to create, edit and link features. The graph stays viewable without an account.'),
+      h('form', { class: 'form', onsubmit: async (e) => {
+        e.preventDefault(); submit.disabled = true;
+        try {
+          const res = await api('POST', '/login', { user: user.value, password: pass.value });
+          setSession(res.data.tokenKey, res.data.userMail);
+          toast('Signed in');
+          state.panel = 'manage';
+          await load();
+        } catch (err) { toast(err.message === 'Invalid user' ? 'Wrong email or password' : err.message, true); }
+        finally { submit.disabled = false; }
+      } },
+        h('div', { class: 'field' }, h('label', {}, 'Email'), user),
+        h('div', { class: 'field' }, h('label', {}, 'Password'), pass),
+        submit),
+    ]];
+  }
 
-    path.link.needs {
-        stroke: #7f3f00;
-    }
+  function viewList() {
+    const rows = [...state.nodes].sort((a, b) => (b.in.length - a.in.length) || a.name.localeCompare(b.name));
+    if (!rows.length) return ['All features', h('p', { class: 'muted' }, 'No features yet.')];
+    return [`All features (${rows.length})`, h('table', { class: 'list' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Feature'), h('th', { class: 'num', title: 'Depends on' }, 'Needs'), h('th', { class: 'num', title: 'Required by' }, 'Used by'))),
+      h('tbody', {}, rows.map((n) => h('tr', { class: 'clickable', onclick: () => select(n, { center: true }) },
+        h('td', {}, h('div', { class: 'nm' }, h('i', { style: `background:${colorOf(n.cls)}` }), n.name)),
+        h('td', { class: 'num' }, n.out.length),
+        h('td', { class: 'num' }, n.in.length)))))];
+  }
 
-    circle {
-        fill: #F5FF90;
-        stroke: #191900;
-        stroke-width: 1.5px;
-    }
+  // ---------- mutations ----------
+  async function mutate(fn, okMsg) {
+    try { await fn(); toast(okMsg); await load(); return true; }
+    catch (e) { toast(e.message, true); return false; }
+  }
+  const createFeature = (name, group, cls) =>
+    mutate(() => api('POST', '/create', { name: name.trim(), group: group.trim(), class: cls.trim() }), `Created “${name.trim()}”`);
+  const updateFeature = (id, name, group, cls) =>
+    mutate(() => api('PATCH', '/updateFeature', { id, name: name.trim(), group: group.trim(), class: cls.trim() }), 'Feature updated');
+  function addDependency(f1, f2) {
+    if (!f1 || !f2) return;
+    if (f1 === f2) return toast('A feature can’t depend on itself', true);
+    if (state.links.some((l) => l.source.key === f1 && l.target.key === f2)) return toast('That dependency already exists', true);
+    const a = state.byKey.get(f1), b = state.byKey.get(f2);
+    return mutate(() => api('POST', '/addDependency', { f1, f2 }), `${a.name} now needs ${b.name}`);
+  }
+  async function deleteFeature(d) {
+    const n = d.in.length + d.out.length;
+    if (!confirm(`Delete “${d.name}”${n ? ` and its ${n} dependenc${n === 1 ? 'y' : 'ies'}` : ''}?`)) return;
+    if (await mutate(() => api('PATCH', '/deleteFeature', { id: d.key }), `Deleted “${d.name}”`)) select(null);
+  }
 
-    circle.payment {
-        fill: #D6FFB7;
-        stroke: #001900;
-    }
+  // ---------- toolbar ----------
+  $('search').addEventListener('input', (e) => { state.query = e.target.value; applyFocus(); });
+  $('search').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const q = state.query.trim().toLowerCase();
+      const hit = q && state.nodes.find((n) => n.name.toLowerCase().includes(q));
+      if (hit) select(hit, { center: true });
+    } else if (e.key === 'Escape') { e.target.value = ''; state.query = ''; applyFocus(); e.target.blur(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $('search').focus(); }
+    else if (e.key === 'Escape' && document.activeElement.tagName !== 'INPUT') { select(null); openPanel(null); }
+  });
+  $('btn-refresh').onclick = () => load({ refit: true });
+  $('btn-list').onclick = () => openPanel(state.panel === 'list' ? null : 'list');
+  $('btn-manage').onclick = () => openPanel(state.token ? 'manage' : 'login');
+  $('empty-add').onclick = () => openPanel(state.token ? 'manage' : 'login');
+  $('btn-theme').onclick = () => {
+    const dark = getComputedStyle(document.documentElement).colorScheme.includes('dark');
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    store.set('fd-theme', next);
+  };
+  const savedTheme = store.get('fd-theme');
+  if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
-    circle.purchase {
-        fill: #FFC15E;
-        stroke: #003366;
-    }
+  let resizeTimer;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => fit(0), 150); });
 
-    circle.account {
-        fill: #FF9F1C;
-        stroke: #660000;
-    }
-
-    circle.nft {
-        fill: #A39594;
-        stroke: #660000;
-    }
-
-    circle.support {
-        fill: #8075FF;
-        stroke: #660000;
-    }
-
-    circle.team {
-        fill: green;
-        stroke: #660000;
-    }
-
-    circle.init {
-        fill: #F5FF90;
-        stroke: #001900;
-    }
-
-    circle.referral {
-        fill: #515A47;
-        stroke: #001900;
-    }
-
-    circle.superpool {
-        fill: red;
-        stroke: #001900;
-    }
-
-    circle.reward {
-        fill: #B084CC;
-        stroke: #001900;
-    }
-
-    circle.removed {
-        fill: gray;
-        stroke: #001900;
-    }
-
-    circle.selected {
-        stroke: #ff6666FF !important;
-        stroke-width: 3px;
-        animation: selected 2s infinite alternate ease-in-out;
-    }
-
-    @keyframes selected {
-        from {
-            stroke-width: 5px;
-            r: 26;
-        }
-
-        to {
-            stroke-width: 1px;
-            r: 30;
-        }
-    }
-
-    text {
-        font: 10px sans-serif;
-        pointer-events: none;
-        /*text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;*/
-    }
-
-    rect.caption {
-        fill: #CCCCCCAC;
-        stroke: #666;
-        stroke-width: 1px;
-    }
-
-    text.caption {
-        font-size: 14px;
-        font-weight: bold;
-    }
-    </style>
+  setSession(state.token, state.user);
+  load();
+})();
+</script>
 </body>
+</html>
